@@ -1,0 +1,40 @@
+{
+  "name": "displaybuddy-mcp",
+  "version": "3.2.2",
+  "description": "MCP server for controlling Mac monitors via DisplayBuddy — adjust brightness, contrast, volume, input source, presets, sync, and more.",
+  "type": "module",
+  "main": "build/index.js",
+  "bin": {
+    "displaybuddy-mcp": "./build/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "mcp",
+    "monitor",
+    "display",
+    "brightness",
+    "contrast",
+    "volume",
+    "ddc",
+    "macos",
+    "displaybuddy"
+  ],
+  "author": "DisplayBuddy",
+  "license": "MIT",
+  "homepage": "https://displaybuddy.app",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/biocross/displaybuddy-mcp"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
+}

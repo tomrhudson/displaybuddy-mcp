@@ -42,8 +42,8 @@ export function resolveDisplayBuddyCli(
 ): string {
   if (env.DISPLAYBUDDY_CLI) return env.DISPLAYBUDDY_CLI;
 
-  const pathMatch = (env.PATH ?? "")
-    .split(delimiter)
+  const pathEntries = env.PATH === undefined ? [] : env.PATH.split(delimiter);
+  const pathMatch = pathEntries
     .map((directory) => resolve(cwd, directory || ".", "displaybuddy"))
     .find(isExecutable);
   if (pathMatch) return pathMatch;

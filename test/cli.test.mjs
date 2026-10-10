@@ -121,6 +121,19 @@ test("treats an empty PATH component as the current directory", async () => {
   }
 });
 
+test("does not search the current directory when PATH is unset", async () => {
+  const fixtureDir = await mkdtemp(join(tmpdir(), "displaybuddy-unset-path-test-"));
+  const localCli = join(fixtureDir, "displaybuddy");
+  await writeFile(localCli, "#!/bin/sh\nexit 0\n");
+  await chmod(localCli, 0o755);
+
+  try {
+    assert.notEqual(resolveDisplayBuddyCli({}, fixtureDir), localCli);
+  } finally {
+    await rm(fixtureDir, { recursive: true, force: true });
+  }
+});
+
 test("passes every value as one argument without invoking a shell", () => {
   const calls = [];
   const display = 'Studio Display"; touch /tmp/should-not-exist; echo "';

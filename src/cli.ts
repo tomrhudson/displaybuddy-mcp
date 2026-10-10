@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { accessSync, constants } from "node:fs";
+import { delimiter, join } from "node:path";
 
 export interface CommandResult {
   success: boolean;
@@ -25,9 +26,26 @@ const DEFAULT_CLI_PATHS = [
   "/opt/homebrew/bin/displaybuddy",
 ];
 
-export function resolveDisplayBuddyCli(): string {
-  if (process.env.DISPLAYBUDDY_CLI) return process.env.DISPLAYBUDDY_CLI;
-  return DEFAULT_CLI_PATHS.find((path) => existsSync(path)) ?? "displaybuddy";
+function isExecutable(path: string): boolean {
+  try {
+    accessSync(path, constants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function resolveDisplayBuddyCli(env: NodeJS.ProcessEnv = process.env): string {
+  if (env.DISPLAYBUDDY_CLI) return env.DISPLAYBUDDY_CLI;
+
+  const pathMatch = (env.PATH ?? "")
+    .split(delimiter)
+    .filter(Boolean)
+    .map((directory) => join(directory, "displaybuddy"))
+    .find(isExecutable);
+  if (pathMatch) return pathMatch;
+
+  return DEFAULT_CLI_PATHS.find(isExecutable) ?? "displaybuddy";
 }
 
 function isLegacyEnvelope(value: unknown): value is CommandResult {
@@ -114,6 +132,9 @@ export function runDisplayBuddy(args: string[], options: RunOptions = {}): Comma
     if (isLegacyEnvelope(parsed)) return parsed;
     return { success: true, data: parsed };
   } catch {
-    return { success: true, data: output };
+    return {
+      success: false,
+      error: `DisplayBuddy CLI returned invalid JSON: ${output}`,
+    };
   }
 }

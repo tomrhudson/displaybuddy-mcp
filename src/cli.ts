@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
-import { accessSync, constants } from "node:fs";
-import { delimiter, join } from "node:path";
+import { accessSync, constants, statSync } from "node:fs";
+import { delimiter, resolve } from "node:path";
 
 export interface CommandResult {
   success: boolean;
@@ -28,6 +28,7 @@ const DEFAULT_CLI_PATHS = [
 
 function isExecutable(path: string): boolean {
   try {
+    if (!statSync(path).isFile()) return false;
     accessSync(path, constants.X_OK);
     return true;
   } catch {
@@ -35,13 +36,15 @@ function isExecutable(path: string): boolean {
   }
 }
 
-export function resolveDisplayBuddyCli(env: NodeJS.ProcessEnv = process.env): string {
+export function resolveDisplayBuddyCli(
+  env: NodeJS.ProcessEnv = process.env,
+  cwd: string = process.cwd()
+): string {
   if (env.DISPLAYBUDDY_CLI) return env.DISPLAYBUDDY_CLI;
 
   const pathMatch = (env.PATH ?? "")
     .split(delimiter)
-    .filter(Boolean)
-    .map((directory) => join(directory, "displaybuddy"))
+    .map((directory) => resolve(cwd, directory || ".", "displaybuddy"))
     .find(isExecutable);
   if (pathMatch) return pathMatch;
 

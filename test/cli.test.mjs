@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import test from "node:test";
 
 import { resolveDisplayBuddyCli, runDisplayBuddy } from "../build/cli.js";
@@ -82,6 +82,43 @@ test("prefers DISPLAYBUDDY_CLI over PATH", () => {
     }),
     "/explicit/displaybuddy"
   );
+});
+
+test("skips PATH entries where displaybuddy is a directory", async () => {
+  const fixtureDir = await mkdtemp(join(tmpdir(), "displaybuddy-directory-test-"));
+  const firstBin = join(fixtureDir, "first");
+  const secondBin = join(fixtureDir, "second");
+  const directoryMatch = join(firstBin, "displaybuddy");
+  const executableMatch = join(secondBin, "displaybuddy");
+  await mkdir(directoryMatch, { recursive: true });
+  await mkdir(secondBin, { recursive: true });
+  await writeFile(executableMatch, "#!/bin/sh\nexit 0\n");
+  await chmod(executableMatch, 0o755);
+
+  try {
+    assert.equal(
+      resolveDisplayBuddyCli({ PATH: `${firstBin}${delimiter}${secondBin}` }),
+      executableMatch
+    );
+  } finally {
+    await rm(fixtureDir, { recursive: true, force: true });
+  }
+});
+
+test("treats an empty PATH component as the current directory", async () => {
+  const fixtureDir = await mkdtemp(join(tmpdir(), "displaybuddy-current-dir-test-"));
+  const executableMatch = join(fixtureDir, "displaybuddy");
+  await writeFile(executableMatch, "#!/bin/sh\nexit 0\n");
+  await chmod(executableMatch, 0o755);
+
+  try {
+    assert.equal(
+      resolveDisplayBuddyCli({ PATH: `${delimiter}/usr/bin` }, fixtureDir),
+      executableMatch
+    );
+  } finally {
+    await rm(fixtureDir, { recursive: true, force: true });
+  }
 });
 
 test("passes every value as one argument without invoking a shell", () => {

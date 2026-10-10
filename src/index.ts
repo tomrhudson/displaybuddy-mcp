@@ -3,45 +3,20 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { execSync } from "child_process";
+import { runDisplayBuddy as run, type CommandResult } from "./cli.js";
 
 const server = new McpServer({
   name: "displaybuddy-mcp",
   version: "3.2.2",
 });
 
-// ---------------------------------------------------------------------------
-// Helper: run displaybuddy CLI and return parsed JSON
-// ---------------------------------------------------------------------------
-
-function run(args: string[]): { success: boolean; data?: any; error?: string } {
-  try {
-    const result = execSync(`displaybuddy ${args.join(" ")} --json`, {
-      encoding: "utf-8",
-      timeout: 10_000,
-    });
-    return JSON.parse(result);
-  } catch (err: any) {
-    // Try to parse JSON error from stderr/stdout
-    const output = err.stdout || err.stderr || "";
-    try {
-      return JSON.parse(output);
-    } catch {
-      if (output.includes("not running")) {
-        return { success: false, error: "DisplayBuddy is not running. Please start DisplayBuddy first." };
-      }
-      return { success: false, error: output.trim() || err.message };
-    }
-  }
-}
-
-function toolResult(result: { success: boolean; data?: any; error?: string }) {
+function toolResult(result: CommandResult) {
   if (result.success) {
     return {
       content: [
         {
           type: "text" as const,
-          text: result.data ? JSON.stringify(result.data, null, 2) : "OK",
+          text: result.data !== undefined ? JSON.stringify(result.data, null, 2) : "OK",
         },
       ],
     };
@@ -85,14 +60,30 @@ server.tool(
   "displaybuddy_get",
   "Get current properties of a specific display.",
   {
-    display: z.string().describe("Display name (case-insensitive)."),
+    display: z
+      .string()
+      .optional()
+      .describe("Display name (case-insensitive). Omit if using uuid."),
+    uuid: z
+      .string()
+      .optional()
+      .describe(
+        "Display UUID from displaybuddy_list. Prefer this when displays share the same name."
+      ),
     property: z
       .enum(["brightness", "contrast", "volume"])
       .optional()
       .describe("Specific property to get. Omit for all properties."),
   },
   async (input) => {
-    const args = ["get", `"${input.display}"`];
+    const args = ["get"];
+    if (input.uuid) {
+      args.push("--uuid", input.uuid);
+    } else if (input.display) {
+      args.push(input.display);
+    } else {
+      return toolResult({ success: false, error: "Specify a display name or uuid." });
+    }
     if (input.property) args.push(`--${input.property}`);
     return toolResult(run(args));
   }
@@ -104,12 +95,18 @@ server.tool(
 
 server.tool(
   "displaybuddy_set",
-  "Set display properties like brightness, contrast, volume, input source, or rotation. Can target a specific display by name or all displays at once.",
+  "Set display properties like brightness, contrast, volume, input source, or rotation. Can target a specific display by name or UUID, or all displays at once.",
   {
     display: z
       .string()
       .optional()
-      .describe('Display name (case-insensitive). Omit if using "all".'),
+      .describe('Display name (case-insensitive). Omit if using "uuid" or "all".'),
+    uuid: z
+      .string()
+      .optional()
+      .describe(
+        "Display UUID from displaybuddy_list. Prefer this when displays share the same name."
+      ),
     all: z
       .boolean()
       .optional()
@@ -157,10 +154,15 @@ server.tool(
     const args = ["set"];
     if (input.all) {
       args.push("--all");
+    } else if (input.uuid) {
+      args.push("--uuid", input.uuid);
     } else if (input.display) {
-      args.push(`"${input.display}"`);
+      args.push(input.display);
     } else {
-      return toolResult({ success: false, error: 'Specify a display name or set "all" to true.' });
+      return toolResult({
+        success: false,
+        error: 'Specify a display name, a uuid, or set "all" to true.',
+      });
     }
     if (input.brightness !== undefined) args.push("--brightness", String(input.brightness));
     if (input.contrast !== undefined) args.push("--contrast", String(input.contrast));
@@ -199,7 +201,7 @@ server.tool(
       .describe("Delay in seconds before activating the preset."),
   },
   async (input) => {
-    const args = ["preset", "activate", `"${input.name}"`];
+    const args = ["preset", "activate", input.name];
     if (input.delay !== undefined) args.push("--delay", String(input.delay));
     return toolResult(run(args));
   }
@@ -228,7 +230,7 @@ server.tool(
   },
   async (input) => {
     const action = input.enabled ? "enable" : "disable";
-    return toolResult(run(["schedule", action, `"${input.id}"`]));
+    return toolResult(run(["schedule", action, input.id]));
   }
 );
 
@@ -246,17 +248,28 @@ server.tool(
     display: z
       .string()
       .optional()
-      .describe('Display name to use as sync source (required when action is "enable").'),
+      .describe(
+        'Display name to use as sync source (required for "enable" unless uuid is given).'
+      ),
+    uuid: z
+      .string()
+      .optional()
+      .describe(
+        "Display UUID from displaybuddy_list. Prefer this when displays share the same name."
+      ),
   },
   async (input) => {
     if (input.action === "enable") {
+      if (input.uuid) {
+        return toolResult(run(["sync", "enable", "--uuid", input.uuid]));
+      }
       if (!input.display) {
         return toolResult({
           success: false,
-          error: "Display name is required when enabling sync.",
+          error: "Display name or uuid is required when enabling sync.",
         });
       }
-      return toolResult(run(["sync", "enable", `"${input.display}"`]));
+      return toolResult(run(["sync", "enable", input.display]));
     }
     return toolResult(run(["sync", input.action]));
   }
